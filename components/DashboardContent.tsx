@@ -353,7 +353,7 @@ const DashboardContent: React.FC = () => {
 
         {/* Today Section */}
         <section className="mb-8">
-          <h2 className="text-2xl font-semibold text-gray-700 mb-4">Today's Overview</h2>
+          <h2 className="text-2xl font-semibold text-gray-700 mb-4">Todays Overview</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <StatCard
               title="Total Sells"
@@ -378,7 +378,7 @@ const DashboardContent: React.FC = () => {
           {/* Today's Sell List */}
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Today's Sell List</CardTitle>
+              <CardTitle>Todays Sell List</CardTitle>
             </CardHeader>
             <CardContent className="overflow-y-auto">
               <SellTable sells={todaySells} />
