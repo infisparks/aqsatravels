@@ -91,7 +91,7 @@ const DashboardContent: React.FC = () => {
   const [sells, setSells] = useState<SellRecord[]>([]);
   const [filteredMonth, setFilteredMonth] = useState<string>('All');
   const [filteredYear, setFilteredYear] = useState<string>('All');
-  const [filteredDay, setFilteredDay] = useState<string>('All'); // New state for day filter
+  const [filteredDay, setFilteredDay] = useState<string>('All');
 
   /**
    * Fetches sell data from Firebase Realtime Database and sets it to state.
@@ -151,22 +151,29 @@ const DashboardContent: React.FC = () => {
       const yearMatch =
         year === 'All' || soldDate.getFullYear() === parseInt(year);
       const dayMatch =
-        day === 'All' ||
-        soldDate.getDate() === parseInt(day);
+        day === 'All' || soldDate.getDate() === parseInt(day);
       return monthMatch && yearMatch && dayMatch;
     });
   };
 
   const filteredSells = filterSells(sells, filteredMonth, filteredYear, filteredDay);
 
-  const todaySells = filteredSells.filter((sell) => {
-    const soldDate = new Date(sell.soldAt);
-    const today = new Date();
-    return (
-      soldDate.toDateString() === today.toDateString() &&
-      (filteredDay === 'All' || soldDate.getDate() === parseInt(filteredDay))
-    );
-  });
+  /**
+   * Determines the sells to display in the "Today" section.
+   * If any filter is applied, it shows the filtered sells.
+   * Otherwise, it shows today's sells.
+   */
+  const todaySells = (filteredMonth !== 'All' || filteredYear !== 'All' || filteredDay !== 'All')
+    ? filteredSells
+    : sells.filter((sell) => {
+        const soldDate = new Date(sell.soldAt);
+        const today = new Date();
+        return (
+          soldDate.getDate() === today.getDate() &&
+          soldDate.getMonth() === today.getMonth() &&
+          soldDate.getFullYear() === today.getFullYear()
+        );
+      });
 
   const totalProductsSold = filteredSells.length;
   const totalMoneyCollected = filteredSells.reduce(
@@ -180,8 +187,6 @@ const DashboardContent: React.FC = () => {
     .filter(sell => sell.paymentMethod === 'online')
     .reduce((acc, sell) => acc + sell.price, 0);
 
-  // **New Additions Start Here**
-
   // Calculate Today's Cash Sales
   const todayCashSales = todaySells
     .filter(sell => sell.paymentMethod === 'cash')
@@ -191,8 +196,6 @@ const DashboardContent: React.FC = () => {
   const todayOnlineSales = todaySells
     .filter(sell => sell.paymentMethod === 'online')
     .reduce((acc, sell) => acc + sell.price, 0);
-
-  // **New Additions End Here**
 
   const lineChartData: ChartData[] = Array.from({ length: 12 }, (_, index) => {
     const month = new Date(0, index).toLocaleString('default', { month: 'short' });
@@ -219,7 +222,7 @@ const DashboardContent: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
       {/* Header Section */}
       <header className="bg-white shadow-md">
         <div className="flex items-center justify-between p-4">
@@ -259,7 +262,7 @@ const DashboardContent: React.FC = () => {
       </header>
 
       {/* Main Content Section */}
-      <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
+      <main className="flex-1 overflow-x-hidden overflow-y-auto p-6">
         <h1 className="text-3xl font-semibold text-gray-800 mb-6">Dashboard</h1>
 
         {/* Filters */}
@@ -348,70 +351,89 @@ const DashboardContent: React.FC = () => {
           </div>
         </div>
 
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
-          <StatCard
-            title="Total Sells Today"
-            icon={Briefcase}
-            value={todaySells.length}
-            subvalue={`Rs. ${todaySells.reduce((acc, sell) => acc + sell.price, 0).toFixed(2)}`}
-          />
-          <StatCard
-            title="Total Products Sold"
-            icon={ChevronDown}
-            value={totalProductsSold}
-            subvalue={`Rs. ${totalMoneyCollected.toFixed(2)}`}
-          />
-          <StatCard
-            title="Total Cash Sales"
-            icon={DollarSign}
-            value={`Rs. ${totalCashSales.toFixed(2)}`}
-            subvalue={`${filteredSells.filter(sell => sell.paymentMethod === 'cash').length} Transactions`}
-          />
-          <StatCard
-            title="Total Online Sales"
-            icon={CreditCard}
-            value={`Rs. ${totalOnlineSales.toFixed(2)}`}
-            subvalue={`${filteredSells.filter(sell => sell.paymentMethod === 'online').length} Transactions`}
-          />
+        {/* Today Section */}
+        <section className="mb-8">
+          <h2 className="text-2xl font-semibold text-gray-700 mb-4">Today's Overview</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <StatCard
+              title="Total Sells"
+              icon={Briefcase}
+              value={todaySells.length}
+              subvalue={`Rs. ${todaySells.reduce((acc, sell) => acc + sell.price, 0).toFixed(2)}`}
+            />
+            <StatCard
+              title="Cash Sales"
+              icon={DollarSign}
+              value={`Rs. ${todayCashSales.toFixed(2)}`}
+              subvalue={`${todaySells.filter(sell => sell.paymentMethod === 'cash').length} Transactions`}
+            />
+            <StatCard
+              title="Online Sales"
+              icon={CreditCard}
+              value={`Rs. ${todayOnlineSales.toFixed(2)}`}
+              subvalue={`${todaySells.filter(sell => sell.paymentMethod === 'online').length} Transactions`}
+            />
+          </div>
 
-          {/* **New Cards Start Here** */}
-          <StatCard
-            title="Today Total Cash"
-            icon={DollarSign}
-            value={`Rs. ${todayCashSales.toFixed(2)}`}
-            subvalue={`${todaySells.filter(sell => sell.paymentMethod === 'cash').length} Transactions`}
-          />
-          <StatCard
-            title="Today Total Online"
-            icon={CreditCard}
-            value={`Rs. ${todayOnlineSales.toFixed(2)}`}
-            subvalue={`${todaySells.filter(sell => sell.paymentMethod === 'online').length} Transactions`}
-          />
-          {/* **New Cards End Here** */}
-        </div>
+          {/* Today's Sell List */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Today's Sell List</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-y-auto">
+              <SellTable sells={todaySells} />
+            </CardContent>
+          </Card>
+        </section>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <ChartCard
-            title="Monthly Sales by Payment Method (Rs.)"
-            chart={<LineChartComponent data={lineChartData} />}
-          />
-          <ChartCard
-            title="Yearly Sales by Payment Method (Rs.)"
-            chart={<BarChartComponent data={barChartData} />}
-          />
-        </div>
+        {/* Total Section */}
+        <section>
+          <h2 className="text-2xl font-semibold text-gray-700 mb-4">Total Overview</h2>
 
-        {/* Today's Sell List */}
-        <Card className="h-96">
-          <CardHeader>
-            <CardTitle>Todays Sell List</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-y-auto">
-            <SellTable sells={todaySells} />
-          </CardContent>
-        </Card>
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            <StatCard
+              title="Total Products Sold"
+              icon={ChevronDown}
+              value={totalProductsSold}
+              subvalue={`Rs. ${totalMoneyCollected.toFixed(2)}`}
+            />
+            <StatCard
+              title="Total Cash Sales"
+              icon={DollarSign}
+              value={`Rs. ${totalCashSales.toFixed(2)}`}
+              subvalue={`${filteredSells.filter(sell => sell.paymentMethod === 'cash').length} Transactions`}
+            />
+            <StatCard
+              title="Total Online Sales"
+              icon={CreditCard}
+              value={`Rs. ${totalOnlineSales.toFixed(2)}`}
+              subvalue={`${filteredSells.filter(sell => sell.paymentMethod === 'online').length} Transactions`}
+            />
+          </div>
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <ChartCard
+              title="Monthly Sales by Payment Method (Rs.)"
+              chart={<LineChartComponent data={lineChartData} />}
+            />
+            <ChartCard
+              title="Yearly Sales by Payment Method (Rs.)"
+              chart={<BarChartComponent data={barChartData} />}
+            />
+          </div>
+
+          {/* Total Sell List */}
+          <Card className="h-96">
+            <CardHeader>
+              <CardTitle>Sell List</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-y-auto">
+              <SellTable sells={filteredSells} />
+            </CardContent>
+          </Card>
+        </section>
       </main>
     </div>
   );
@@ -431,14 +453,14 @@ interface StatCardProps {
  * Component representing a statistical card.
  */
 const StatCard: React.FC<StatCardProps> = ({ title, icon: Icon, value, subvalue }) => (
-  <Card>
+  <Card className="shadow-lg">
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      <Icon className="h-4 w-4 text-muted-foreground" />
+      <CardTitle className="text-sm font-medium text-gray-600">{title}</CardTitle>
+      <Icon className="h-6 w-6 text-indigo-500" />
     </CardHeader>
     <CardContent>
-      <div className="text-2xl font-bold">{value}</div>
-      <p className="text-xs text-muted-foreground">{subvalue}</p>
+      <div className="text-2xl font-bold text-gray-800">{value}</div>
+      <p className="text-sm text-gray-500">{subvalue}</p>
     </CardContent>
   </Card>
 );
@@ -455,7 +477,7 @@ interface ChartCardProps {
  * Component representing a chart card.
  */
 const ChartCard: React.FC<ChartCardProps> = ({ title, chart }) => (
-  <Card>
+  <Card className="shadow-lg">
     <CardHeader>
       <CardTitle>{title}</CardTitle>
     </CardHeader>
@@ -532,22 +554,22 @@ const SellTable: React.FC<SellTableProps> = ({ sells }) => (
         <table className="min-w-full bg-white">
           <thead>
             <tr>
-              <th className="py-2 px-4 border-b">Product Name</th>
-              <th className="py-2 px-4 border-b">Price (Rs.)</th>
-              <th className="py-2 px-4 border-b">Payment Method</th>
-              <th className="py-2 px-4 border-b">Phone Number</th>
-              <th className="py-2 px-4 border-b">Sold At</th>
+              <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">Product Name</th>
+              <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">Price (Rs.)</th>
+              <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">Payment Method</th>
+              <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">Phone Number</th>
+              <th className="py-2 px-4 border-b text-left text-sm font-medium text-gray-700">Sold At</th>
             </tr>
           </thead>
           <tbody>
             {sells.map((sell) => (
-              <tr key={sell.id}>
-                <td className="py-2 px-4 border-b">{sell.name}</td>
-                <td className="py-2 px-4 border-b">{sell.price.toFixed(2)}</td>
-                <td className="py-2 px-4 border-b capitalize">{sell.paymentMethod}</td>
-                <td className="py-2 px-4 border-b">{sell.phoneNumber || 'N/A'}</td>
-                <td className="py-2 px-4 border-b">
-                  {new Date(sell.soldAt).toLocaleTimeString()}
+              <tr key={sell.id} className="hover:bg-gray-50">
+                <td className="py-2 px-4 border-b text-sm text-gray-600">{sell.name}</td>
+                <td className="py-2 px-4 border-b text-sm text-gray-600">{sell.price.toFixed(2)}</td>
+                <td className="py-2 px-4 border-b text-sm text-gray-600 capitalize">{sell.paymentMethod}</td>
+                <td className="py-2 px-4 border-b text-sm text-gray-600">{sell.phoneNumber || 'N/A'}</td>
+                <td className="py-2 px-4 border-b text-sm text-gray-600">
+                  {new Date(sell.soldAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </td>
               </tr>
             ))}
@@ -555,11 +577,11 @@ const SellTable: React.FC<SellTableProps> = ({ sells }) => (
         </table>
       </div>
     ) : (
-      <p className="text-sm text-gray-500">No products sold today.</p>
+      <p className="text-sm text-gray-500">No products sold in this period.</p>
     )}
     <div className="mt-4">
       <p className="text-sm font-medium">
-        Total Cost Today: Rs. {sells.reduce((acc, sell) => acc + sell.price, 0).toFixed(2)}
+        Total Cost: Rs. {sells.reduce((acc, sell) => acc + sell.price, 0).toFixed(2)}
       </p>
     </div>
   </>
