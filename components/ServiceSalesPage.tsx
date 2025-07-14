@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ref, onValue } from "firebase/database"
 import { database } from "@/lib/firebase"
-import { parseISO, isToday, isSameDay, isSameMonth, isSameYear, format } from "date-fns"
+import { parseISO, isToday, isSameDay, isSameMonth, isSameYear } from "date-fns"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 
 interface SellData {
@@ -27,8 +27,6 @@ const ServiceSalesPage: React.FC = () => {
 
   const [filteredSales, setFilteredSales] = useState<SellData[]>([])
   const [productQuantities, setProductQuantities] = useState<{ name: string; quantity: number }[]>([])
-  const [mostSold, setMostSold] = useState<{ name: string; quantity: number }[]>([])
-  const [leastSold, setLeastSold] = useState<{ name: string; quantity: number }[]>([])
 
   useEffect(() => {
     const sellRef = ref(database, "sell")
@@ -80,11 +78,7 @@ const ServiceSalesPage: React.FC = () => {
       }
     })
     const productArray = Object.values(productCount)
-    setProductQuantities(productArray) // Store for the graph
-
-    productArray.sort((a, b) => b.quantity - a.quantity)
-    setMostSold(productArray.slice(0, 5))
-    setLeastSold(productArray.slice(-5).reverse())
+    setProductQuantities(productArray) // Store for the graph and list
   }, [sellData, filter, selectedDateInput, selectedMonthInput, selectedYearInput])
 
   // Calculate total sales for the selected filter
@@ -107,14 +101,13 @@ const ServiceSalesPage: React.FC = () => {
             <CardTitle className="text-2xl">Sales Overview</CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
-            <h2 className="text-xl font-semibold mb-4 text-[#0a1963]">Total Sales: ₹{totalSales.toFixed(2)}</h2>
             <div className="flex flex-wrap justify-center gap-4 mb-6">
               <Button
                 onClick={() => handleFilterChange("today")}
                 variant={filter === "today" ? "default" : "outline"}
                 className={filter === "today" ? "bg-[#0a1963] hover:bg-[#0c1d7a] text-white" : ""}
               >
-                Todays Sales
+                Today Sales
               </Button>
               <Button
                 onClick={() => handleFilterChange("all")}
@@ -207,28 +200,25 @@ const ServiceSalesPage: React.FC = () => {
                 </Button>
               </div>
             </div>
-            {filteredSales.length > 0 ? (
-              <div className="overflow-y-auto max-h-[400px]">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredSales.map((sale) => (
-                    <Card key={sale.id} className="shadow-md hover:shadow-xl transition-shadow duration-300">
-                      <CardHeader className="bg-[#0a1963] bg-opacity-10">
-                        <CardTitle className="text-xl font-semibold text-[#0a1963]">{sale.name}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-4">
-                        <p className="font-semibold text-[#0a1963]">₹{sale.price.toFixed(2)}</p>
-                        <p className="text-sm text-gray-500 mt-2">
-                          {format(parseISO(sale.soldAt), "dd MMM yyyy HH:mm")}
-                        </p>
-                        <p className="text-sm text-gray-500 mt-2">Payment: {sale.paymentMethod}</p>
-                      </CardContent>
-                    </Card>
+            <h2 className="text-xl font-semibold mb-4 text-[#0a1963] text-center">
+              Total Sales: ₹{totalSales.toFixed(2)}
+            </h2>
+
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-4 text-[#0a1963]">Product Quantities (Filtered)</h3>
+              {productQuantities.length > 0 ? (
+                <ul className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {productQuantities.map((product, index) => (
+                    <li key={index} className="flex justify-between px-4 py-2 bg-gray-100 rounded">
+                      <span className="font-medium text-[#0a1963]">{product.name}</span>
+                      <span className="text-gray-600">Quantity: {product.quantity}</span>
+                    </li>
                   ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-center text-gray-500">No sales found for the selected period.</p>
-            )}
+                </ul>
+              ) : (
+                <p className="text-center text-gray-500">No product sales found for the selected period.</p>
+              )}
+            </div>
           </CardContent>
         </Card>
         <div className="grid grid-cols-1 mb-8">
@@ -254,89 +244,6 @@ const ServiceSalesPage: React.FC = () => {
             </CardContent>
           </Card>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          <Card className="shadow-lg">
-            <CardHeader className="bg-[#0a1963] text-white">
-              <CardTitle className="text-xl">Top Sold Services</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="max-h-[300px] overflow-y-auto">
-                {mostSold.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={mostSold}>
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="quantity" fill="#0a1963" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-gray-500">No data available.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="shadow-lg">
-            <CardHeader className="bg-[#0a1963] text-white">
-              <CardTitle className="text-xl">Least Sold Services</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="max-h-[300px] overflow-y-auto">
-                {leastSold.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={leastSold}>
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="quantity" fill="#0a1963" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-gray-500">No data available.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        <Card className="shadow-lg">
-          <CardHeader className="bg-[#0a1963] text-white">
-            <CardTitle className="text-xl">Sales Details</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <h3 className="text-lg font-semibold mb-4 text-[#0a1963]">Top Sold Services</h3>
-                {mostSold.length > 0 ? (
-                  <ul className="space-y-2 max-h-[200px] overflow-y-auto">
-                    {mostSold.map((product, index) => (
-                      <li key={index} className="flex justify-between px-4 py-2 bg-gray-100 rounded">
-                        <span className="font-medium text-[#0a1963]">{product.name}</span>
-                        <span className="text-gray-600">Quantity: {product.quantity}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-center text-gray-500">No data available.</p>
-                )}
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-4 text-[#0a1963]">Least Sold Services</h3>
-                {leastSold.length > 0 ? (
-                  <ul className="space-y-2 max-h-[200px] overflow-y-auto">
-                    {leastSold.map((product, index) => (
-                      <li key={index} className="flex justify-between px-4 py-2 bg-gray-100 rounded">
-                        <span className="font-medium text-[#0a1963]">{product.name}</span>
-                        <span className="text-gray-600">Quantity: {product.quantity}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-center text-gray-500">No data available.</p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )
