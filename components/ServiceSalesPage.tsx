@@ -114,7 +114,7 @@ const ServiceSalesPage: React.FC = () => {
                 variant={filter === "today" ? "default" : "outline"}
                 className={filter === "today" ? "bg-[#0a1963] hover:bg-[#0c1d7a] text-white" : ""}
               >
-                Today's Sales
+                Todays Sales
               </Button>
               <Button
                 onClick={() => handleFilterChange("all")}
