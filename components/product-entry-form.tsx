@@ -1,16 +1,14 @@
 // components/ProductEntryForm.tsx
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import axios, { isAxiosError } from 'axios'; // Updated import
+import axios, { isAxiosError } from 'axios';
 import { ref, get, push, set } from "firebase/database";
 import { database } from '@/lib/firebase';
-// Removed unused import
-// import thumbnail from "@/public/aqsa.png"
 
 /**
  * Interface representing the details of a service/product.
@@ -30,7 +28,11 @@ interface SellData {
   productId: string;
   name: string;
   description: string;
-  price: number;
+  unitPrice: number;
+  quantity: number;
+  totalPriceCalculated: number;
+  finalPriceCharged: number;
+  discount: number; // The numeric value saved to the database
   phoneNumber: string | null;
   soldAt: string;
   paymentMethod: 'cash' | 'online';
@@ -42,22 +44,29 @@ interface SellData {
 interface WhatsAppApiResponse {
   success: boolean;
   message: string;
-  [key: string]: unknown; // Replaced 'any' with 'unknown'
+  [key: string]: unknown;
 }
+
+// Helper to format currency (example: to 2 decimal places)
+const formatCurrency = (value: number) => value.toFixed(2);
 
 export function ProductEntryForm() {
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<ServiceDetail[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<ServiceDetail[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<ServiceDetail | null>(null);
-  const [price, setPrice] = useState('');
+  const [unitPrice, setUnitPrice] = useState('');
+  const [quantity, setQuantity] = useState<number>(1);
+  const [totalPriceCalculated, setTotalPriceCalculated] = useState<number>(0);
+  const [discountInput, setDiscountInput] = useState(''); // New state for discount input (string)
+  const [finalPriceCharged, setFinalPriceCharged] = useState(''); // Calculated based on discount
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online'>('cash'); // Added state
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online'>('cash');
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // New loading state
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch products on component mount
+  // Fetch products on component mount (No Change)
   useEffect(() => {
     const fetchProducts = async () => {
       const servicedetailsRef = ref(database, 'servicedetails');
@@ -84,6 +93,32 @@ export function ProductEntryForm() {
     fetchProducts();
   }, []);
 
+  // Effect to calculate Total Price and recalculate Final Price/Discount on changes
+  useEffect(() => {
+    if (selectedProduct && unitPrice) {
+      const priceVal = parseFloat(unitPrice);
+      const calculatedTotal = priceVal * quantity;
+      setTotalPriceCalculated(calculatedTotal);
+      
+      // Calculate final price based on the current discount input
+      const discountVal = parseFloat(discountInput) || 0;
+      let finalPrice = calculatedTotal - discountVal;
+
+      // Ensure final price is not negative
+      if (finalPrice < 0) {
+        finalPrice = 0;
+        // Adjust discount if it resulted in a negative final price
+        setDiscountInput(formatCurrency(calculatedTotal));
+      }
+
+      setFinalPriceCharged(formatCurrency(finalPrice));
+    } else {
+      setTotalPriceCalculated(0);
+      setDiscountInput('');
+      setFinalPriceCharged('');
+    }
+  }, [selectedProduct, unitPrice, quantity, discountInput]); // Now depends on discountInput
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
@@ -102,11 +137,48 @@ export function ProductEntryForm() {
 
   const handleSelectProduct = (product: ServiceDetail) => {
     setSelectedProduct(product);
-    setPrice(product.price.toFixed(2));
+    setUnitPrice(product.price.toFixed(2));
+    setQuantity(1);
+    setDiscountInput(''); // Reset discount
     setSearchTerm(product.name);
     setShowSuggestions(false);
     setMessage(null);
   };
+  
+  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value, 10);
+    const newQuantity = Math.max(1, isNaN(value) ? 1 : value);
+    setQuantity(newQuantity);
+    setDiscountInput(''); // Reset discount when quantity changes
+  };
+  
+  // New handler for discount input
+  const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const discountVal = parseFloat(value);
+    
+    // Only update discountInput state with the raw value
+    setDiscountInput(value);
+
+    const calculatedTotal = totalPriceCalculated;
+    
+    if (calculatedTotal > 0 && !isNaN(discountVal) && discountVal >= 0) {
+        let newFinalPrice = calculatedTotal - discountVal;
+        
+        // Cap the discount so the final price is not negative
+        if (newFinalPrice < 0) {
+            newFinalPrice = 0;
+            // The discount will be capped by the total price in the useEffect
+        }
+        setFinalPriceCharged(formatCurrency(newFinalPrice));
+
+    } else if (value.trim() === '' || isNaN(discountVal) || discountVal < 0) {
+        // If discount is cleared or invalid, set final price back to total
+        setFinalPriceCharged(formatCurrency(calculatedTotal));
+    }
+    // Note: The useEffect dependency on discountInput will handle the actual state calculation
+  };
+
 
   const handleSell = async () => {
     if (!selectedProduct) {
@@ -114,12 +186,18 @@ export function ProductEntryForm() {
       return;
     }
 
-    if (!price || parseFloat(price) < 0) {
-      setMessage({ type: 'error', text: "Please enter a valid price." });
+    const finalPriceVal = parseFloat(finalPriceCharged);
+    if (isNaN(finalPriceVal) || finalPriceVal < 0) {
+      setMessage({ type: 'error', text: "Final price calculation error. Please review the inputs." });
       return;
     }
+    
+    // Final check for values to be saved
+    const unitPriceVal = parseFloat(unitPrice);
+    const calculatedTotal = unitPriceVal * quantity;
+    const finalDiscount = calculatedTotal - finalPriceVal; // Recalculate based on final values
 
-    setIsLoading(true); // Start loading
+    setIsLoading(true);
 
     const sellRef = ref(database, 'sell');
     const newSellRef = push(sellRef);
@@ -128,10 +206,14 @@ export function ProductEntryForm() {
       productId: selectedProduct.id,
       name: selectedProduct.name,
       description: selectedProduct.description,
-      price: parseFloat(price),
+      unitPrice: unitPriceVal,
+      quantity: quantity,
+      totalPriceCalculated: calculatedTotal,
+      finalPriceCharged: finalPriceVal,
+      discount: finalDiscount > 0 ? finalDiscount : 0, // Ensure discount is non-negative
       phoneNumber: phoneNumber.trim() || null,
       soldAt: new Date().toISOString(),
-      paymentMethod, // Include payment method
+      paymentMethod,
     };
 
     try {
@@ -142,37 +224,42 @@ export function ProductEntryForm() {
         await sendWhatsAppMessage(sellData, sellData.phoneNumber);
       }
 
-      setMessage({ type: 'success', text: "Product sold successfully." });
+      setMessage({ type: 'success', text: "Product sold successfully. Invoice sent via WhatsApp (if number provided)." });
       // Reset form
       setSelectedProduct(null);
-      setPrice('');
+      setUnitPrice('');
+      setQuantity(1);
+      setTotalPriceCalculated(0);
+      setDiscountInput('');
+      setFinalPriceCharged('');
       setSearchTerm('');
       setPhoneNumber('');
-      setPaymentMethod('cash'); // Reset payment method
-    } catch (error: unknown) { // Changed from any to unknown
+      setPaymentMethod('cash');
+    } catch (error: unknown) {
       console.error('Error selling product:', error);
       setMessage({ type: 'error', text: "Failed to sell product." });
     } finally {
-      setIsLoading(false); // End loading
+      setIsLoading(false);
     }
   };
 
   /**
-   * Sends a professional invoice message via WhatsApp.
-   * @param sellData The data related to the sold product.
-   * @param phoneNumber The recipient's phone number.
+   * Sends a professional invoice message via WhatsApp. (Updated for clarity)
    */
   const sendWhatsAppMessage = async (sellData: SellData, phoneNumber: string) => {
     try {
-      // Craft a professional invoice message
+      // Craft a professional invoice message with new fields
       const invoiceMessage = `
 Hello,
 
 *Thank you for your purchase!* Here are your invoice details:
 
 *Product Name:* ${sellData.name}
-*Description:* ${sellData.description}
-*Price:* ₹${sellData.price.toFixed(2)}
+*Unit Price:* ₹${formatCurrency(sellData.unitPrice)}
+*Quantity:* ${sellData.quantity}
+*Total Calculated Price:* ₹${formatCurrency(sellData.totalPriceCalculated)}
+*Discount:* ₹${formatCurrency(sellData.discount)}
+*Final Price Charged:* ₹${formatCurrency(sellData.finalPriceCharged)}
 *Payment Method:* ${capitalizeFirstLetter(sellData.paymentMethod)}
 *Date:* ${new Date(sellData.soldAt).toLocaleString()}
 
@@ -186,7 +273,7 @@ Best regards,
         number: phoneNumber,
         message: invoiceMessage,
         type: "media",
-        media_url: "https://raw.githubusercontent.com/mudassir47/public/refs/heads/main/aqsa.png" // Keeping the same image URL
+        media_url: "https://raw.githubusercontent.com/mudassir47/public/refs/heads/main/aqsa.png"
       };
 
       const response = await axios.post<WhatsAppApiResponse>('/api/send-whatsapp', payload, {
@@ -201,8 +288,8 @@ Best regards,
         console.error('Failed to send invoice message:', response.data.message);
         setMessage({ type: 'error', text: "Failed to send WhatsApp invoice message." });
       }
-    } catch (error: unknown) { // Changed from any to unknown
-      if (isAxiosError(error)) { // Use isAxiosError directly
+    } catch (error: unknown) {
+      if (isAxiosError(error)) {
         console.error('Axios Error:', error.response?.data?.message || error.message);
         setMessage({ type: 'error', text: "Failed to send WhatsApp invoice message." });
       } else if (error instanceof Error) {
@@ -217,8 +304,6 @@ Best regards,
 
   /**
    * Capitalizes the first letter of a string.
-   * @param str The string to capitalize.
-   * @returns The capitalized string.
    */
   const capitalizeFirstLetter = (str: string) => {
     return str.charAt(0).toUpperCase() + str.slice(1);
@@ -257,7 +342,7 @@ Best regards,
                 onFocus={() => setShowSuggestions(filteredProducts.length > 0)}
               />
               {showSuggestions && filteredProducts.length > 0 && (
-                <ul className="absolute z-10 bg-white border border-gray-300 w-full mt-1 max-h-40 overflow-y-auto">
+                <ul className="absolute z-10 bg-white border border-gray-300 w-full mt-1 max-h-40 overflow-y-auto shadow-lg">
                   {filteredProducts.map((product) => (
                     <li
                       key={product.id}
@@ -273,77 +358,85 @@ Best regards,
 
             {selectedProduct && (
               <div className="space-y-4 border-t pt-4">
+                {/* Product details (no change) */}
+                <div><Label htmlFor="productName">Product Name</Label><Input id="productName" value={selectedProduct.name} readOnly className="bg-gray-100" /></div>
+                <div><Label htmlFor="productDescription">Description</Label><Input id="productDescription" value={selectedProduct.description} readOnly className="bg-gray-100" /></div>
+                
+                {/* Unit Price (Read-only) */}
                 <div>
-                  <Label htmlFor="productName">Product Name</Label>
+                  <Label htmlFor="unitPrice">Unit Price (Rs)</Label>
+                  <Input id="unitPrice" type="number" value={unitPrice} readOnly className="bg-gray-100" />
+                </div>
+                
+                {/* Quantity Input */}
+                <div>
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input id="quantity" type="number" value={quantity} onChange={handleQuantityChange} min="1" />
+                </div>
+                
+                {/* Total Calculated Price (Read-only) */}
+                <div>
+                  <Label htmlFor="totalPriceCalculated">Total Calculated Price (Unit Price x Quantity)</Label>
                   <Input
-                    id="productName"
-                    value={selectedProduct.name}
+                    id="totalPriceCalculated"
+                    type="text"
+                    value={`₹${formatCurrency(totalPriceCalculated)}`}
                     readOnly
-                    className="bg-gray-100"
+                    className="bg-blue-100 font-bold"
                   />
                 </div>
+                
+                {/* DISCOUNT INPUT (User Editable) */}
                 <div>
-                  <Label htmlFor="productDescription">Description</Label>
+                  <Label htmlFor="discountInput">Discount Applied (Rs)</Label>
                   <Input
-                    id="productDescription"
-                    value={selectedProduct.description}
-                    readOnly
-                    className="bg-gray-100"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="productPrice">Price (Rs)</Label>
-                  <Input
-                    id="productPrice"
+                    id="discountInput"
                     type="number"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    value={discountInput}
+                    onChange={handleDiscountChange}
+                    placeholder="Enter discount amount"
                     step="0.01"
                     min="0"
                   />
                 </div>
+                
+                {/* Final Price Charged (Read-only - derived from discount) */}
                 <div>
-                  <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
+                  <Label htmlFor="finalPriceCharged">Final Price Charged (Rs)</Label>
                   <Input
-                    id="phoneNumber"
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="Enter phone number"
+                    id="finalPriceCharged"
+                    type="text"
+                    value={finalPriceCharged ? `₹${finalPriceCharged}` : '₹0.00'}
+                    readOnly // Now read-only
+                    className="bg-green-100 font-bold"
                   />
                 </div>
-                {/* Payment Method Selection */}
+                
+                {/* Phone Number (No Change) */}
+                <div>
+                  <Label htmlFor="phoneNumber">Phone Number (Optional for WhatsApp Invoice)</Label>
+                  <Input id="phoneNumber" type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="Enter phone number" />
+                </div>
+                
+                {/* Payment Method Selection (No Change) */}
                 <div>
                   <Label className="block mb-1">Payment Method</Label>
                   <div className="flex items-center space-x-4">
                     <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="cash"
-                        checked={paymentMethod === 'cash'}
-                        onChange={() => setPaymentMethod('cash')}
-                        className="mr-2"
-                      />
+                      <input type="radio" name="paymentMethod" value="cash" checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} className="mr-2" />
                       Cash
                     </label>
                     <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="online"
-                        checked={paymentMethod === 'online'}
-                        onChange={() => setPaymentMethod('online')}
-                        className="mr-2"
-                      />
+                      <input type="radio" name="paymentMethod" value="online" checked={paymentMethod === 'online'} onChange={() => setPaymentMethod('online')} className="mr-2" />
                       Online
                     </label>
                   </div>
                 </div>
+                
                 <Button
                   onClick={handleSell}
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
-                  disabled={isLoading} // Disable button when loading
+                  disabled={isLoading || !finalPriceCharged || parseFloat(finalPriceCharged) < 0}
                 >
                   {isLoading ? (
                     <>
