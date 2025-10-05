@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo} from 'react';
 import { signOut } from 'firebase/auth';
 import { ref, onValue } from 'firebase/database';
 import { useRouter } from 'next/navigation';
 import {
   Bell,
-  Briefcase,
+ 
   Settings,
   LogOut,
   User,
@@ -14,7 +14,7 @@ import {
   CreditCard,
   ShoppingBag,
   Tag,
-  Calendar,
+ 
   Filter,
   ArrowUp,
   ArrowDown,
@@ -213,7 +213,7 @@ const DashboardContent: React.FC = () => {
           return date;
         };
 
-        let startOfWeek = getStartOfWeek(today);
+        const startOfWeek = getStartOfWeek(today);
 
         if (filteredWeek === 'This Week') {
           // soldDate >= start of this week
@@ -602,7 +602,7 @@ const ReportTable: React.FC<ReportTableProps> = ({ title, data, initialSortKey, 
     });
 
     const sortedData = useMemo(() => {
-        let sortableItems = [...data];
+        const sortableItems = [...data];
         if (sortConfig.key) {
             sortableItems.sort((a, b) => {
                 const aValue = a[sortConfig.key];

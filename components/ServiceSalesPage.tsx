@@ -29,10 +29,6 @@ interface SellData {
 /**
  * Interface for aggregated product sales quantities.
  */
-interface ProductQuantity {
-  name: string;
-  quantity: number;
-}
 
 const ServiceSalesPage: React.FC = () => {
   const [sellData, setSellData] = useState<SellData[]>([]);
@@ -160,7 +156,7 @@ const ServiceSalesPage: React.FC = () => {
                 variant={filter === "today" ? "default" : "outline"}
                 className={filter === "today" ? "bg-[#0a1963] hover:bg-[#0c1d7a] text-white" : "border-[#0a1963] text-[#0a1963]"}
               >
-                Today's Sales
+                Today Sales
               </Button>
               <Button
                 onClick={() => handleFilterChange("all")}
